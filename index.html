@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>技术部订单计划管理系统</title>
+  <!-- 外部资源（仅首次打开加载，后续本地运行无依赖） -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.544.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  
+  <!-- 自定义样式 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3b82f6',    // 主蓝色
+            success: '#10b981',    // 成功绿
+            warning: '#f59e0b',    // 警告黄
+            danger: '#ef4444',     // 危险红
+            gray: {
+              50: '#f9fafb',
+              100: '#f3f4f6',
+              200: '#e5e7eb',
+              500: '#6b7280',
+              700: '#374151',
+              900: '#111827'
+            }
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.5s ease-in-out',
+            'scale-in': 'scaleIn 0.5s ease-in-out',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
+            },
+            scaleIn: {
+              '0%': { transform: 'scale(0)', opacity: '0' },
+              '100%': { transform: 'scale(1)', opacity: '1' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      /* 倒计时脉冲动画 */
+      .countdown-pulse {
+        animation: countdownPulse 1s ease-in-out infinite alternate;
+      }
+      @keyframes countdownPulse {
+        from { transform: scale(1); }
+        to { transform: scale(1.05); }
+      }
+      
+      /* 烟花动画 */
+      .firework {
+        position: absolute;
+        border-radius: 50%;
+        transform-origin: center;
+        animation: fireworkBurst 2s ease-out forwards;
+      }
+      @keyframes fireworkBurst {
+        0% { width: 0; height: 0; opacity: 1; }
+        50% { opacity: 1; }
+        100% { width: 200px; height: 200px; opacity: 0; }
+      }
+      
+      /* 星星闪光动画 */
+      .star {
+        position: absolute;
+        background-color: #fff;
+        clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+        animation: starTwinkle 1.5s ease-in-out infinite;
+      }
+      @keyframes starTwinkle {
+        0%, 100% { transform: scale(0.5) rotate(0deg); opacity: 0.5; }
+        50% { transform: scale(1) rotate(180deg); opacity: 1; }
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+  <!-- 顶部导航 -->
+  <header class="bg-white shadow-md sticky top-0 z-10">
+    <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <i data-lucide="factory" class="w-8 h-8 text-primary"></i>
+        <h1 class="text-2xl font-bold text-gray-900">技术部订单生产计划</h1>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="hidden md:flex items-center gap-6 text-sm">
+          <div class="flex items-center gap-1">
+            <i data-lucide="check-circle" class="w-4 h-4 text-success"></i>
+            <span id="completed-count" class="font-medium">0</span>
+            <span class="text-gray-500">已完成</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <i data-lucide="clock" class="w-4 h-4 text-warning"></i>
+            <span id="pending-count" class="font-medium">0</span>
+            <span class="text-gray-500">生产中</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-danger"></i>
+            <span id="risk-count" class="font-medium">0</span>
+            <span class="text-gray-500">风险</span>
+          </div>
+        </div>
+        <button id="add-order-btn" class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>添加订单</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="container mx-auto px-6 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- 左侧：订单轮播+列表 -->
+      <div class="lg:col-span-2">
+        <!-- 订单轮播 -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-gray-900 flex items-center">
+              <i data-lucide="list-ordered" class="w-5 h-5 mr-2 text-primary"></i>
+              待生产订单
+            </h2>
+            <div class="flex gap-2">
+              <button id="prev-order" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <i data-lucide="chevron-left" class="w-5 h-5 text-gray-600"></i>
+              </button>
+              <button id="next-order" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <i data-lucide="chevron-right" class="w-5 h-5 text-gray-600"></i>
+              </button>
+            </div>
+          </div>
+          
+          <!-- 轮播容器 -->
+          <div id="order-carousel" class="relative overflow-hidden rounded-xl">
+            <div id="order-cards" class="flex transition-transform duration-500 ease-in-out">
+              <!-- 轮播卡片动态生成 -->
+            </div>
+          </div>
+          
+          <!-- 轮播指示器 -->
+          <div id="carousel-indicators" class="flex justify-center mt-4 gap-2">
+            <!-- 指示器动态生成 -->
+          </div>
+        </div>
+        
+        <!-- 所有订单列表 -->
+        <div class="bg-white rounded-xl shadow-lg p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-900 flex items-center">
+              <i data-lucide="table" class="w-5 h-5 mr-2 text-primary"></i>
+              全部订单列表
+            </h2>
+            <div class="flex items-center gap-2">
+              <select id="status-filter" class="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="all">全部状态</option>
+                <option value="pending">未开始</option>
+                <option value="production">生产中</option>
+                <option value="completed">已完成</option>
+                <option value="delayed">延期</option>
+              </select>
+              <button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <i data-lucide="refresh-cw" class="w-5 h-5 text-gray-600"></i>
+              </button>
+            </div>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">订单号</th>
+                  <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">产品编号</th>
+                  <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">产品名称</th>
+                  <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">数量</th>
+                  <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">交付日期</th>
+                  <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                  <th class="px-6 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                </tr>
+              </thead>
+              <tbody id="orders-table-body" class="bg-white divide-y divide-gray-200">
+                <!-- 表格内容动态生成 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 右侧：统计+风险提醒 -->
+      <div class="lg:col-span-1">
+        <!-- 统计卡片 -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center">
+            <i data-lucide="bar-chart-3" class="w-5 h-5 mr-2 text-primary"></i>
+            生产统计
+          </h2>
+          
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-blue-50 rounded-lg p-4 text-center shadow-sm border border-blue-100">
+              <p class="text-sm text-gray-500">总订单数</p>
+              <p id="total-orders" class="text-2xl font-bold text-primary">0</p>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4 text-center shadow-sm border border-green-100">
+              <p class="text-sm text-gray-500">完成率</p>
+              <p id="completion-rate" class="text-2xl font-bold text-success">0%</p>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-4 text-center shadow-sm border border-yellow-100">
+              <p class="text-sm text-gray-500">生产中</p>
+              <p id="in-production" class="text-2xl font-bold text-warning">0</p>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4 text-center shadow-sm border border-red-100">
+              <p class="text-sm text-gray-500">延期订单</p>
+              <p id="delayed-orders" class="text-2xl font-bold text-danger">0</p>
+            </div>
+          </div>
+          
+          <!-- 状态分布图表 -->
+          <div class="mb-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-2">订单状态分布</h3>
+            <div class="h-64">
+              <canvas id="status-chart"></canvas>
+            </div>
+          </div>
+          
+          <!-- 近期交付图表 -->
+          <div>
+            <h3 class="text-sm font-medium text-gray-500 mb-2">近期交付计划</h3>
+            <div class="h-64">
+              <canvas id="delivery-chart"></canvas>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 风险订单提醒 -->
+        <div class="bg-white rounded-xl shadow-lg p-6">
+          <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 text-warning"></i>
+            风险订单提醒
+          </h2>
+          
+          <div id="risk-orders" class="space-y-3">
+            <!-- 风险订单动态生成 -->
+            <p class="text-gray-500 text-sm italic">暂无风险订单</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 添加/编辑订单模态框 -->
+  <div id="order-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-fade-in">
+      <div class="flex justify-between items-center mb-6">
+        <h3 id="modal-title" class="text-xl font-bold text-gray-900">添加订单</h3>
+        <button id="close-modal" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <i data-lucide="x" class="w-5 h-5 text-gray-600"></i>
+        </button>
+      </div>
+      
+      <form id="order-form">
+        <input type="hidden" id="order-id">
+        
+        <div class="grid gap-4 mb-6">
+          <div>
+            <label for="order-number" class="block text-sm font-medium text-gray-700 mb-1">订单号</label>
+            <input type="text" id="order-number" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required>
+          </div>
+          
+          <div>
+            <label for="product-id" class="block text-sm font-medium text-gray-700 mb-1">产品编号</label>
+            <input type="text" id="product-id" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required>
+          </div>
+          
+          <div>
+            <label for="product-name" class="block text-sm font-medium text-gray-700 mb-1">产品名称</label>
+            <input type="text" id="product-name" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required>
+          </div>
+          
+          <div>
+            <label for="quantity" class="block text-sm font-medium text-gray-700 mb-1">数量</label>
+            <input type="number" id="quantity" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" min="1" required>
+          </div>
+          
+          <div>
+            <label for="delivery-date" class="block text-sm font-medium text-gray-700 mb-1">交付日期</label>
+            <input type="date" id="delivery-date" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required>
+          </div>
+          
+          <div>
+            <label for="status" class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+            <select id="status" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+              <option value="pending">未开始</option>
+              <option value="production">生产中</option>
+              <option value="completed">已完成</option>
+              <option value="delayed">延期</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="flex justify-end gap-3">
+          <button type="button" id="cancel-form" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">取消</button>
+          <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 订单详情模态框 -->
+  <div id="detail-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 animate-fade-in">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-bold text-gray-900">订单详情</h3>
+        <button id="close-detail" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <i data-lucide="x" class="w-5 h-5 text-gray-600"></i>
+        </button>
+      </div>
+      
+      <div id="order-details" class="space-y-4">
+        <!-- 详情动态生成 -->
+      </div>
+      
+      <div class="flex justify-end gap-3 mt-6">
+        <button id="complete-order-btn" class="px-4 py-2 bg-success hover:bg-success/90 text-white rounded-lg transition-colors">完成订单</button>
+        <button id="edit-order" class="px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors">编辑</button>
+        <button id="delete-order" class="px-4 py-2 border border-danger text-danger rounded-lg hover:bg-danger/5 transition-colors">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 确认删除模态框 -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 animate-fade-in">
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+          <i data-lucide="trash-2" class="w-8 h-8 text-danger"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900 mb-2">确认删除</h3>
+        <p class="text-gray-500">您确定要删除此订单吗？此操作无法撤销。</p>
+      </div>
+      
+      <div class="flex justify-center gap-3">
+        <button id="cancel-delete" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">取消</button>
+        <button id="confirm-delete" class="px-4 py-2 bg-danger hover:bg-danger/90 text-white rounded-lg transition-colors">删除</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 交付成功庆祝弹窗 -->
+  <div id="delivery-celebration" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 hidden">
+    <div id="celebration-card" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-scale-in">
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-success/10 mb-4">
+          <i data-lucide="check-circle" class="w-10 h-10 text-success"></i>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-900 mb-2">🎉 订单交付成功！</h3>
+        <p class="text-gray-500">恭喜！该订单已完成生产并交付</p>
+      </div>
+      
+      <div id="celebration-order-details" class="bg-gray-50 rounded-xl p-6 mb-6">
+        <!-- 订单详情动态生成 -->
+      </div>
+      
+      <div class="flex justify-center">
+        <button id="close-celebration" class="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all hover:scale-105">
+          确认
+        </button>
+      </div>
+    </div>
+    
+    <!-- 动画容器 -->
+    <div id="celebration-container" class="fixed inset-0 pointer-events-none"></div>
+  </div>
+
+  <!-- 核心逻辑脚本 -->
+  <script>
+    // 初始化图标
+    lucide.createIcons();
+    
+    // 全局变量
+    let orders = [];
+    let currentOrderIndex = 0;
+    let statusChart = null;
+    let deliveryChart = null;
+    let currentOrderId = null; // 当前操作的订单ID
+    
+    // 页面加载完成初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      initData();        // 初始化数据
+      renderOrders();    // 渲染订单
+      updateStats();     // 更新统计
+      initCharts();      // 初始化图表
+      bindEvents();      // 绑定事件
+      startAutoCarousel();// 启动自动轮播
+    });
+
+    // 1. 数据初始化（本地存储）
+    function initData() {
+      const stored = localStorage.getItem('production_orders');
+      if (stored) {
+        orders = JSON.parse(stored);
+      } else {
+        // 默认测试数据
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        orders = [
+          {
+            id: generateId(),
+            orderNumber: "ORD-2025-001",
+            productId: "PROD-001",
+            productName: "精密车床A-100",
+            quantity: 5,
+            deliveryDate: formatDate(new Date(today.setDate(today.getDate() + 7))),
+            status: "production",
+            createdAt: formatDate(new Date()),
+            updatedAt: formatDate(new Date())
+          },
+          {
+            id: generateId(),
+            orderNumber: "ORD-2025-002",
+            productId: "PROD-002",
+            productName: "数控铣床B-200",
+            quantity: 3,
+            deliveryDate: formatDate(tomorrow),
+            status: "pending",
+            createdAt: formatDate(new Date()),
+            updatedAt: formatDate(new Date())
+          }
+        ];
+        saveData();
+      }
+    }
+
+    // 生成唯一ID
+    function generateId() {
+      return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    }
+
+    // 格式化日期
+    function formatDate(date) {
+      return date.toISOString().split('T')[0];
+    }
+
+    // 保存数据到本地
+    function saveData() {
+      localStorage.setItem('production_orders', JSON.stringify(orders));
+    }
+
+    // 2. 渲染订单（轮播+表格+风险提醒）
+    function renderOrders() {
+      renderCarousel();
+      renderTable();
+      renderRiskOrders();
+    }
+
+    // 渲染轮播卡片
+    function renderCarousel() {
+      const container = document.getElementById('order-cards');
+      const indicators = document.getElementById('carousel-indicators');
+      container.innerHTML = '';
+      indicators.innerHTML = '';
+
+      if (orders.length === 0) {
+        container.innerHTML = `
+          <div class="w-full p-12 text-center">
+            <i data-lucide="inbox" class="w-16 h-16 text-gray-300 mx-auto mb-4"></i>
+            <p class="text-gray-500">暂无订单数据</p>
+            <button onclick="openAddModal()" class="mt-4 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg transition-all">
+              添加第一个订单
+            </button>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      // 生成轮播卡片
+      orders.forEach((order, index) => {
+        const daysLeft = getDaysUntilDelivery(order.deliveryDate);
+        const statusClass = getStatusClass(order.status);
+        const statusText = getStatusText(order.status);
+        const countdownClass = daysLeft <= 3 && order.status !== 'completed' ? 'countdown-pulse' : '';
+        const dateColor = daysLeft < 0 ? 'text-danger' : daysLeft <= 3 ? 'text-warning' : 'text-success';
+
+        // 卡片内容
+        const card = document.createElement('div');
+        card.className = 'w-full flex-shrink-0 p-1';
+        card.innerHTML = `
+          <div class="bg-white rounded-xl shadow-lg overflow-hidden border-2 ${index === currentOrderIndex ? 'border-primary' : 'border-transparent'} transition-all hover:shadow-xl">
+            <div class="p-6">
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full ${statusClass} text-white mb-2">
+                    ${statusText}
+                  </span>
+                  <h3 class="text-xl font-bold text-gray-900">${order.productName}</h3>
+                  <p class="text-gray-500 text-sm">订单号: ${order.orderNumber}</p>
+                </div>
+                <div class="text-right">
+                  <div class="text-2xl font-bold ${countdownClass} ${dateColor}">
+                    ${daysLeft < 0 ? '已延期' : daysLeft === 0 ? '今日交付' : `${daysLeft}天`}
+                  </div>
+                  <p class="text-gray-500 text-xs">剩余时间</p>
+                </div>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <p class="text-gray-500 text-xs">产品编号</p>
+                  <p class="font-medium">${order.productId}</p>
+                </div>
+                <div>
+                  <p class="text-gray-500 text-xs">数量</p>
+                  <p class="font-medium">${order.quantity} 台</p>
+                </div>
+                <div>
+                  <p class="text-gray-500 text-xs">交付日期</p>
+                  <p class="font-medium">${formatDisplayDate(order.deliveryDate)}</p>
+                </div>
+                <div>
+                  <p class="text-gray-500 text-xs">创建日期</p>
+                  <p class="font-medium">${formatDisplayDate(order.createdAt)}</p>
+                </div>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <button onclick="viewDetail('${order.id}')" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                  查看详情
+                </button>
+                <!-- 新增：卡片页完成订单按钮 -->
+                ${order.status !== 'completed' ? `
+                <button onclick="completeOrder('${order.id}')" class="px-4 py-2 bg-success hover:bg-success/90 text-white rounded-lg transition-colors">
+                  完成订单
+                </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+
+        // 生成指示器
+        const indicator = document.createElement('button');
+        indicator.className = `w-3 h-3 rounded-full transition-all ${index === currentOrderIndex ? 'bg-primary w-8' : 'bg-gray-300'}`;
+        indicator.onclick = () => goToSlide(index);
+        indicators.appendChild(indicator);
+      });
+
+      // 更新轮播位置
+      updateCarouselPosition();
+    }
+
+    // 渲染订单表格
+    function renderTable() {
+      const tbody = document.getElementById('orders-table-body');
+      const filter = document.getElementById('status-filter').value;
+      tbody.innerHTML = '';
+
+      if (orders.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="px-6 py-12 text-center text-gray-500">暂无订单数据</td>
+          </tr>
+        `;
+        return;
+      }
+
+      // 过滤订单
+      let filtered = orders;
+      if (filter !== 'all') {
+        filtered = orders.filter(o => o.status === filter);
+      }
+
+      // 按交付日期排序
+      filtered.sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate));
+
+      // 生成表格行
+      filtered.forEach(order => {
+        const daysLeft = getDaysUntilDelivery(order.deliveryDate);
+        const statusClass = getStatusClass(order.status);
+        const statusText = getStatusText(order.status);
+        const dateClass = daysLeft < 0 ? 'text-danger font-medium' : daysLeft <= 3 ? 'text-warning font-medium' : '';
+
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50 transition-colors';
+        row.innerHTML = `
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm font-medium text-gray-900">${order.orderNumber}</div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm text-gray-900">${order.productId}</div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm text-gray-900">${order.productName}</div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="text-sm text-gray-900">${order.quantity}</div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap ${dateClass}">
+            <div class="text-sm">${formatDisplayDate(order.deliveryDate)}</div>
+            ${daysLeft >= 0 ? `<div class="text-xs text-gray-500">${daysLeft}天后</div>` : `<div class="text-xs text-danger">已延期${Math.abs(daysLeft)}天</div>`}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+              ${statusText}
+            </span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <button onclick="viewDetail('${order.id}')" class="text-primary hover:text-primary/80 mr-3">查看</button>
+            <button onclick="editOrder('${order.id}')" class="text-gray-600 hover:text-gray-900">编辑</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // 渲染风险订单
+    function renderRiskOrders() {
+      const container = document.getElementById('risk-orders');
+      container.innerHTML = '';
+
+      // 筛选风险订单（延期/即将到期）
+      const riskOrders = orders.filter(order => {
+        if (order.status === 'completed') return false;
+        const daysLeft = getDaysUntilDelivery(order.deliveryDate);
+        return daysLeft < 0 || daysLeft <= 3;
+      });
+
+      if (riskOrders.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm italic">暂无风险订单</p>';
+        return;
+      }
+
+      // 生成风险订单卡片
+      riskOrders.forEach(order => {
+        const daysLeft = getDaysUntilDelivery(order.deliveryDate);
+        const riskClass = daysLeft < 0 ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200';
+        const riskTextClass = daysLeft < 0 ? 'text-danger' : 'text-warning';
+        const riskIcon = daysLeft < 0 ? 'alert-circle' : 'alert-triangle';
+
+        const card = document.createElement('div');
+        card.className = `${riskClass} border rounded-lg p-3`;
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <h4 class="font-medium text-gray-900">${order.productName}</h4>
+              <p class="text-xs text-gray-500">订单号: ${order.orderNumber}</p>
+            </div>
+            <i data-lucide="${riskIcon}" class="w-4 h-4 ${riskTextClass}"></i>
+          </div>
+          <div class="flex justify-between items-center mt-2">
+            <p class="text-xs ${riskTextClass} font-medium">
+              ${daysLeft < 0 ? `已延期${Math.abs(daysLeft)}天` : `仅剩${daysLeft}天`}
+            </p>
+            <button onclick="viewDetail('${order.id}')" class="text-xs text-primary hover:underline">
+              查看详情
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    // 3. 辅助函数
+    // 获取状态样式
+    function getStatusClass(status) {
+      switch (status) {
+        case 'pending': return 'bg-blue-100 text-blue-800';
+        case 'production': return 'bg-yellow-100 text-yellow-800';
+        case 'completed': return 'bg-green-100 text-green-800';
+        case 'delayed': return 'bg-red-100 text-red-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    }
+
+    // 获取状态文本
+    function getStatusText(status) {
+      switch (status) {
+        case 'pending': return '未开始';
+        case 'production': return '生产中';
+        case 'completed': return '已完成';
+        case 'delayed': return '延期';
+        default: return '未知';
+      }
+    }
+
+    // 计算距离交付日期的天数
+    function getDaysUntilDelivery(dateStr) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const delivery = new Date(dateStr);
+      delivery.setHours(0, 0, 0, 0);
+      return Math.floor((delivery - today) / (1000 * 60 * 60 * 24));
+    }
+
+    // 格式化显示日期
+    function formatDisplayDate(dateStr) {
+      const date = new Date(dateStr);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    // 4. 轮播控制
+    function updateCarouselPosition() {
+      const container = document.getElementById('order-cards');
+      const width = container.offsetWidth;
+      container.style.transform = `translateX(-${currentOrderIndex * width}px)`;
+    }
+
+    function showPrevOrder() {
+      if (orders.length === 0) return;
+      currentOrderIndex = (currentOrderIndex - 1 + orders.length) % orders.length;
+      renderCarousel();
+    }
+
+    function showNextOrder() {
+      if (orders.length === 0) return;
+      currentOrderIndex = (currentOrderIndex + 1) % orders.length;
+      renderCarousel();
+    }
+
+    function goToSlide(index) {
+      currentOrderIndex = index;
+      renderCarousel();
+    }
+
+    function startAutoCarousel() {
+      setInterval(() => {
+        if (orders.length > 1) showNextOrder();
+      }, 5000);
+    }
+
+    // 5. 统计和图表
+    function updateStats() {
+      const total = orders.length;
+      const completed = orders.filter(o => o.status === 'completed').length;
+      const production = orders.filter(o => o.status === 'production').length;
+      const delayed = orders.filter(o => getDaysUntilDelivery(o.deliveryDate) < 0 && o.status !== 'completed').length;
+      const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      // 更新统计数字
+      document.getElementById('total-orders').textContent = total;
+      document.getElementById('completion-rate').textContent = `${completionRate}%`;
+      document.getElementById('in-production').textContent = production;
+      document.getElementById('delayed-orders').textContent = delayed;
+      document.getElementById('completed-count').textContent = completed;
+      document.getElementById('pending-count').textContent = production;
+      document.getElementById('risk-count').textContent = delayed;
+
+      // 更新图表
+      updateCharts();
+    }
+
+    function initCharts() {
+      // 状态分布图表
+      const statusCtx = document.getElementById('status-chart').getContext('2d');
+      statusChart = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['未开始', '生产中', '已完成', '延期'],
+          datasets: [{
+            data: [0, 0, 0, 0],
+            backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'],
+            borderWidth: 2,
+            borderColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } },
+          cutout: '70%'
+        }
+      });
+
+      // 近期交付图表
+      const deliveryCtx = document.getElementById('delivery-chart').getContext('2d');
+      deliveryChart = new Chart(deliveryCtx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [{
+            label: '订单数量',
+            data: [],
+            backgroundColor: '#3b82f6',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+
+      updateCharts();
+    }
+
+    function updateCharts() {
+      if (!statusChart || !deliveryChart) return;
+
+      // 更新状态分布
+      const pending = orders.filter(o => o.status === 'pending').length;
+      const production = orders.filter(o => o.status === 'production').length;
+      const completed = orders.filter(o => o.status === 'completed').length;
+      const delayed = orders.filter(o => o.status === 'delayed').length;
+      statusChart.data.datasets[0].data = [pending, production, completed, delayed];
+      statusChart.update();
+
+      // 更新近期交付
+      const deliveryData = {};
+      const today = new Date();
+      // 初始化未来7天
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() + i);
+        const key = formatDisplayDate(formatDate(date));
+        deliveryData[key] = 0;
+      }
+      // 统计订单
+      orders.forEach(order => {
+        if (order.status === 'completed') return;
+        const daysLeft = getDaysUntilDelivery(order.deliveryDate);
+        if (daysLeft >= 0 && daysLeft < 7) {
+          const key = formatDisplayDate(order.deliveryDate);
+          deliveryData[key] = (deliveryData[key] || 0) + 1;
+        }
+      });
+
+      deliveryChart.data.labels = Object.keys(deliveryData);
+      deliveryChart.data.datasets[0].data = Object.values(deliveryData);
+      deliveryChart.update();
+    }
+
+    // 6. 事件绑定
+    function bindEvents() {
+      // 轮播控制
+      document.getElementById('prev-order').onclick = showPrevOrder;
+      document.getElementById('next-order').onclick = showNextOrder;
+
+      // 添加订单
+      document.getElementById('add-order-btn').onclick = openAddModal;
+
+      // 模态框关闭
+      document.getElementById('close-modal').onclick = closeModal;
+      document.getElementById('cancel-form').onclick = closeModal;
+      document.getElementById('close-detail').onclick = closeDetailModal;
+      document.getElementById('cancel-delete').onclick = closeConfirmModal;
+
+      // 表单提交
+      document.getElementById('order-form').onsubmit = submitForm;
+
+      // 筛选和刷新
+      document.getElementById('status-filter').onchange = renderTable;
+      document.getElementById('refresh-btn').onclick = () => {
+        renderOrders();
+        updateStats();
+      };
+
+      // 详情页完成订单按钮
+      document.getElementById('complete-order-btn').onclick = () => {
+        if (currentOrderId) {
+          completeOrder(currentOrderId);
+          closeDetailModal();
+        }
+      };
+
+      // 详情页编辑/删除
+      document.getElementById('edit-order').onclick = () => {
+        if (currentOrderId) {
+          editOrder(currentOrderId);
+          closeDetailModal();
+        }
+      };
+      document.getElementById('delete-order').onclick = () => {
+        if (currentOrderId) {
+          openConfirmModal(currentOrderId);
+          closeDetailModal();
+        }
+      };
+
+      // 确认删除
+      document.getElementById('confirm-delete').onclick = confirmDelete;
+
+      // 关闭庆祝弹窗
+      document.getElementById('close-celebration').onclick = closeCelebrationModal;
+
+      // 点击模态框背景关闭
+      document.getElementById('order-modal').onclick = (e) => {
+        if (e.target === document.getElementById('order-modal')) closeModal();
+      };
+      document.getElementById('detail-modal').onclick = (e) => {
+        if (e.target === document.getElementById('detail-modal')) closeDetailModal();
+      };
+      document.getElementById('confirm-modal').onclick = (e) => {
+        if (e.target === document.getElementById('confirm-modal')) closeConfirmModal();
+      };
+    }
+
+    // 7. 模态框操作
+    function openAddModal() {
+      document.getElementById('modal-title').textContent = '添加订单';
+      document.getElementById('order-form').reset();
+      document.getElementById('order-id').value = '';
+      // 默认日期为明天
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('delivery-date').value = formatDate(tomorrow);
+      document.getElementById('order-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('order-modal').classList.add('hidden');
+    }
+
+    function viewDetail(orderId) {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      currentOrderId = orderId;
+      const daysLeft = getDaysUntilDelivery(order.deliveryDate);
+      const statusClass = getStatusClass(order.status);
+      const statusText = getStatusText(order.status);
+      const dateColor = daysLeft < 0 ? 'text-danger' : daysLeft <= 3 ? 'text-warning' : 'text-success';
+
+      document.getElementById('order-details').innerHTML = `
+        <div class="flex justify-between items-start mb-6">
+          <div>
+            <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full ${statusClass} text-white mb-2">
+              ${statusText}
+            </span>
+            <h3 class="text-2xl font-bold text-gray-900">${order.productName}</h3>
+            <p class="text-gray-500">订单号: ${order.orderNumber}</p>
+          </div>
+          <div class="text-right">
+            <div class="text-3xl font-bold ${dateColor}">
+              ${daysLeft < 0 ? `已延期${Math.abs(daysLeft)}天` : daysLeft === 0 ? '今日交付' : `${daysLeft}天`}
+            </div>
+            <p class="text-gray-500 text-sm">${daysLeft < 0 ? '逾期' : '剩余时间'}</p>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-6 mb-6">
+          <div>
+            <p class="text-sm text-gray-500 mb-1">产品编号</p>
+            <p class="font-medium">${order.productId}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">数量</p>
+            <p class="font-medium">${order.quantity} 台</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">交付日期</p>
+            <p class="font-medium">${formatDisplayDate(order.deliveryDate)}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">创建日期</p>
+            <p class="font-medium">${formatDisplayDate(order.createdAt)}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">最后更新</p>
+            <p class="font-medium">${formatDisplayDate(order.updatedAt)}</p>
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 rounded-lg p-4">
+          <h4 class="text-sm font-medium text-gray-700 mb-2">订单进度</h4>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2 overflow-hidden">
+            <div class="h-2.5 rounded-full ${getProgressBarClass(order.status)}" style="width: ${getProgressPercent(order.status)}%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-gray-500">
+            <span>创建订单</span>
+            <span>生产中</span>
+            <span>已完成</span>
+          </div>
+        </div>
+      `;
+
+      // 显示/隐藏完成订单按钮
+      document.getElementById('complete-order-btn').style.display = order.status === 'completed' ? 'none' : 'block';
+      document.getElementById('detail-modal').classList.remove('hidden');
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detail-modal').classList.add('hidden');
+    }
+
+    function openConfirmModal(orderId) {
+      currentOrderId = orderId;
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-modal').classList.add('hidden');
+    }
+
+    function editOrder(orderId) {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      document.getElementById('modal-title').textContent = '编辑订单';
+      document.getElementById('order-id').value = order.id;
+      document.getElementById('order-number').value = order.orderNumber;
+      document.getElementById('product-id').value = order.productId;
+      document.getElementById('product-name').value = order.productName;
+      document.getElementById('quantity').value = order.quantity;
+      document.getElementById('delivery-date').value = order.deliveryDate;
+      document.getElementById('status').value = order.status;
+
+      document.getElementById('order-modal').classList.remove('hidden');
+    }
+
+    function submitForm(e) {
+      e.preventDefault();
+      const id = document.getElementById('order-id').value;
+      const now = new Date();
+
+      const orderData = {
+        orderNumber: document.getElementById('order-number').value,
+        productId: document.getElementById('product-id').value,
+        productName: document.getElementById('product-name').value,
+        quantity: parseInt(document.getElementById('quantity').value),
+        deliveryDate: document.getElementById('delivery-date').value,
+        status: document.getElementById('status').value,
+        updatedAt: formatDate(now)
+      };
+
+      if (id) {
+        // 编辑现有订单
+        const index = orders.findIndex(o => o.id === id);
+        if (index !== -1) {
+          orders[index] = { ...orders[index], ...orderData };
+        }
+      } else {
+        // 添加新订单
+        orders.push({
+          id: generateId(),
+          ...orderData,
+          createdAt: formatDate(now)
+        });
+      }
+
+      saveData();
+      renderOrders();
+      updateStats();
+      closeModal();
+    }
+
+    function confirmDelete() {
+      if (!currentOrderId) return;
+      const index = orders.findIndex(o => o.id === currentOrderId);
+      if (index !== -1) {
+        orders.splice(index, 1);
+        saveData();
+        renderOrders();
+        updateStats();
+        
+        // 调整轮播索引
+        if (currentOrderIndex >= orders.length && orders.length > 0) {
+          currentOrderIndex = orders.length - 1;
+          renderCarousel();
+        }
+      }
+      closeConfirmModal();
+    }
+
+    // 8. 完成订单（核心功能）
+    function completeOrder(orderId) {
+      const index = orders.findIndex(o => o.id === orderId);
+      if (index === -1) return;
+
+      // 更新订单状态
+      orders[index].status = 'completed';
+      orders[index].updatedAt = formatDate(new Date());
+      saveData();
+      renderOrders();
+      updateStats();
+
+      // 显示庆祝动画
+      showCelebration(orders[index]);
+    }
+
+    // 显示庆祝动画
+    function showCelebration(order) {
+      // 填充订单详情
+      document.getElementById('celebration-order-details').innerHTML = `
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <p class="text-sm text-gray-500 mb-1">产品名称</p>
+            <p class="font-bold text-gray-900">${order.productName}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">订单号</p>
+            <p class="font-medium">${order.orderNumber}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">产品编号</p>
+            <p class="font-medium">${order.productId}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">数量</p>
+            <p class="font-medium">${order.quantity} 台</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">交付日期</p>
+            <p class="font-medium">${formatDisplayDate(order.deliveryDate)}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-500 mb-1">完成时间</p>
+            <p class="font-medium">${formatDisplayDate(order.updatedAt)}</p>
+          </div>
+        </div>
+      `;
+
+      // 显示弹窗
+      document.getElementById('delivery-celebration').classList.remove('hidden');
+      
+      // 创建烟花和星星动画
+      createCelebrationAnimation();
+    }
+
+    function closeCelebrationModal() {
+      document.getElementById('delivery-celebration').classList.add('hidden');
+      document.getElementById('celebration-container').innerHTML = '';
+    }
+
+    // 创建烟花+星星动画
+    function createCelebrationAnimation() {
+      const container = document.getElementById('celebration-container');
+      container.innerHTML = '';
+      const colors = ['#3b82f6', '#f97316', '#10b981', '#eab308', '#ef4444', '#8b5cf6'];
+
+      // 烟花效果（卡片周围）
+      const positions = [
+        { x: 25, y: 25 }, { x: 75, y: 25 },
+        { x: 25, y: 75 }, { x: 75, y: 75 },
+        { x: 50, y: 15 }, { x: 50, y: 85 }
+      ];
+
+      positions.forEach((pos, index) => {
+        setTimeout(() => {
+          // 创建烟花粒子
+          for (let i = 0; i < 25; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'firework';
+            particle.style.left = `${pos.x}%`;
+            particle.style.top = `${pos.y}%`;
+            particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            particle.style.boxShadow = `0 0 12px 6px ${particle.style.backgroundColor}`;
+            
+            const angle = (i / 25) * Math.PI * 2;
+            const distance = 40 + Math.random() * 60;
+            const delay = Math.random() * 0.5;
+
+            particle.style.animation = `fireworkBurst 1.2s ease-out ${delay}s forwards`;
+            particle.style.transform = `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px)`;
+            container.appendChild(particle);
+          }
+
+          // 中心闪光
+          const glow = document.createElement('div');
+          glow.className = 'absolute rounded-full';
+          glow.style.left = `${pos.x}%`;
+          glow.style.top = `${pos.y}%`;
+          glow.style.width = '20px';
+          glow.style.height = '20px';
+          glow.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          glow.style.boxShadow = `0 0 20px 10px ${glow.style.backgroundColor}`;
+          glow.style.transform = 'translate(-50%, -50%)';
+          glow.style.animation = 'fireworkBurst 0.8s ease-out forwards';
+          container.appendChild(glow);
+        }, index * 300);
+      });
+
+      // 星星效果
+      for (let i = 0; i < 30; i++) {
+        setTimeout(() => {
+          const star = document.createElement('div');
+          star.className = 'star';
+          star.style.left = `${Math.random() * 90 + 5}%`;
+          star.style.top = `${Math.random() * 80 + 10}%`;
+          star.style.width = `${8 + Math.random() * 25}px`;
+          star.style.height = `${8 + Math.random() * 25}px`;
+          star.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          star.style.boxShadow = `0 0 ${star.style.width/2}px ${star.style.backgroundColor}`;
+          star.style.transform = 'translate(-50%, -50%)';
+          star.style.animationDelay = `${Math.random() * 2}s`;
+          star.style.animationDuration = `${1.2 + Math.random() * 2.5}s`;
+          container.appendChild(star);
+
+          // 自动移除星星
+          setTimeout(() => {
+            if (star.parentNode === container) container.removeChild(star);
+          }, (parseFloat(star.style.animationDelay) + parseFloat(star.style.animationDuration) * 2) * 1000);
+        }, i * 150);
+      }
+    }
+
+    // 进度条样式
+    function getProgressBarClass(status) {
+      switch (status) {
+        case 'pending': return 'bg-primary';
+        case 'production': return 'bg-warning';
+        case 'completed': return 'bg-success';
+        case 'delayed': return 'bg-danger';
+        default: return 'bg-gray-500';
+      }
+    }
+
+    function getProgressPercent(status) {
+      switch (status) {
+        case 'pending': return 33;
+        case 'production': return 66;
+        case 'completed': return 100;
+        case 'delayed': return 66;
+        default: return 0;
+      }
+    }
+  </script>
+</body>
+</html>
